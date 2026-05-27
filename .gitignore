@@ -1,0 +1,32 @@
+# Python 虛擬環境與快取
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Node.js 依賴套件
+node_modules/
+backend/node_modules/
+
+# 敏感金鑰與環境變數設定檔 (保護 API Key 與 Token 安全)
+.env
+backend/.env
+
+# 本地端截圖檔案 (不提交截圖，僅保留代碼與目錄結構說明)
+image/Instant_screenshot/*.jpg
+snapshots/
+
+# VS Code 與編輯器設定
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# 其他大型套件或本地檔案
+python.vsix
+*.log

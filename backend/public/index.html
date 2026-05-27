@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIoT 智慧安全監控與主動防禦儀表板</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Urbanist:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Background decorative blur shapes -->
+    <div class="blur-shape shape-1"></div>
+    <div class="blur-shape shape-2"></div>
+    <div class="blur-shape shape-3"></div>
+
+    <div class="container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-shield-halved logo-icon"></i>
+                <div class="logo-text">
+                    <h1>AIoT Active Safety</h1>
+                    <p>智慧安全監控與主動防禦平台</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span class="status-text">系統連線中...</span>
+                </div>
+                <div class="time-display" id="time-display">00:00:00</div>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="dashboard-grid">
+            
+            <!-- COLUMN 1: LIVE MONITOR -->
+            <section class="dash-card monitor-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-video"></i> 邊緣端即時影像監控</h2>
+                    <span class="badge" id="camera-badge">CAMERA-01</span>
+                </div>
+                <div class="card-content">
+                    <div class="video-container">
+                        <!-- YOLO annotation overlay visualizer -->
+                        <div class="video-placeholder" id="video-placeholder">
+                            <video id="webcam-video" autoplay playsinline style="display: none;"></video>
+                            <img src="/bus.jpg" alt="Live Stream" id="live-stream-img">
+                            <canvas id="detection-canvas"></canvas>
+                        </div>
+                        <div class="overlay-info">
+                            <span class="fps-counter"><i class="fa-solid fa-bolt"></i> CPU: 12 FPS</span>
+                            <span class="resolution">640x640</span>
+                        </div>
+                    </div>
+                    <div class="control-panel">
+                        <button class="btn btn-primary" id="toggle-stream-btn">
+                            <i class="fa-solid fa-play"></i> 啟動即時辨識
+                        </button>
+                        <button class="btn btn-secondary" id="save-snapshot-btn">
+                            <i class="fa-solid fa-camera"></i> 截圖存檔
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMN 2: REAL-TIME GRAPH & METRICS -->
+            <section class="dash-card stats-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-chart-line"></i> 工安數據即時趨勢</h2>
+                    <div class="stats-period">LIVE DATA</div>
+                </div>
+                <div class="card-content">
+                    <!-- Metric Cards -->
+                    <div class="metric-grid">
+                        <div class="metric-box box-safe">
+                            <div class="metric-icon"><i class="fa-solid fa-hard-hat"></i></div>
+                            <div class="metric-data">
+                                <span class="metric-num" id="safe-count">0</span>
+                                <span class="metric-label">安全合規人員</span>
+                            </div>
+                        </div>
+                        <div class="metric-box box-danger animate-pulse-slow">
+                            <div class="metric-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                            <div class="metric-data">
+                                <span class="metric-num" id="violation-count">0</span>
+                                <span class="metric-label">違規未配戴</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart -->
+                    <div class="chart-container">
+                        <canvas id="realtimeChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMN 3: REAL-TIME LOGS & GEMINI AUDIT -->
+            <section class="dash-card logs-card">
+                <div class="card-tabs">
+                    <button class="tab-btn active" data-tab="logs-tab"><i class="fa-solid fa-list-check"></i> 即時偵測日誌</button>
+                    <button class="tab-btn" data-tab="gemini-tab"><i class="fa-solid fa-brain"></i> Gemini 智慧稽核</button>
+                </div>
+                <div class="card-content">
+                    
+                    <!-- Tab 1: Logs List -->
+                    <div class="tab-pane active" id="logs-tab">
+                        <div class="logs-wrapper" id="logs-wrapper">
+                            <div class="log-placeholder">
+                                <i class="fa-solid fa-spinner fa-spin"></i>
+                                <p>正在等待 YOLO 辨識日誌寫入...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Gemini Report Generator -->
+                    <div class="tab-pane" id="gemini-tab">
+                        <div class="gemini-panel">
+                            <div class="gemini-desc">
+                                <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_v002.svg" alt="Gemini" class="gemini-logo">
+                                <h3>Gemini 智慧工安稽核報告</h3>
+                                <p>連線 PostgreSQL 資料庫，撈取最新 100 筆 YOLO 偵測紀錄，透過 **Gemini 2.5 Flash** 自動生成專業的工安防禦警告與具體改善報告。</p>
+                            </div>
+                            <button class="btn btn-gemini" id="generate-report-btn">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> 一鍵生成智慧工安報告
+                            </button>
+                            <div class="gemini-output-container">
+                                <div class="gemini-loader" id="gemini-loader" style="display:none;">
+                                    <div class="sparkle-ring"></div>
+                                    <p>Gemini 正在分析數據、生成改善建議中...</p>
+                                </div>
+                                <div class="gemini-report-content" id="gemini-report-content">
+                                    <div class="report-empty">
+                                        <i class="fa-solid fa-clipboard-list"></i>
+                                        <p>點擊上方按鈕，即刻讓 AI 進行工安稽核診斷</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Alert Toast -->
+    <div class="alert-toast" id="alert-toast">
+        <i class="fa-solid fa-triangle-exclamation toast-icon"></i>
+        <div class="toast-body">
+            <h4 class="toast-title">工安違規警告</h4>
+            <p class="toast-desc">偵測到人員未戴安全帽 / 未穿反光背心！</p>
+        </div>
+    </div>
+
+    <!-- App Script -->
+    <script src="/js/app.js"></script>
+</body>
+</html>
