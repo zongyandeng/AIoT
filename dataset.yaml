@@ -8,12 +8,14 @@ path: /home/edison/aiot_workspace/image/Instant_screenshot/relabeled_final_split
 train: train/images
 val: valid/images
 
-# 3. 類別數量
-nc: 4
+# 3. 類別數量 (修正：資料集內實際含有 6 類，已幫你解鎖 class 4 與 5)
+nc: 6
 
-# 4. 類別名稱對照表
+# 4. 類別名稱對照表 (已幫你精準還原為 6 類)
 names:
-  0: helmet
-  1: vest
-  2: no-helmet
-  3: no-vest
+  0: helmet      # 有戴安全帽
+  1: vest        # 有穿反光背心
+  2: no-helmet   # 未戴安全帽 🚨
+  3: no-vest     # 未穿反光背心 🚨
+  4: worker      # 人員/工人
+  5: head        # 頭部/臉部
