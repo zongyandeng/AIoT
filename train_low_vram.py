@@ -17,7 +17,7 @@ def train_yolo():
     # 2. 開始訓練並應用低顯存優化超參數
     model.train(
         data="dataset.yaml",      # 你的資料集設定檔路徑 (例如 data.yaml)
-        epochs=20,                # 訓練的 Epoch 數 (修正：3.5 萬張圖片遷移學習 20 輪已完全足夠收斂，總計僅需約 9 小時)
+        epochs=100,               # 訓練的 Epoch 數 (已改回 100，允許你明天早上隨時手動 Ctrl+C 終止並拿走 best.pt)
         batch=4,                  # GTX 1650 關鍵：設為 4 或 2 避免顯存溢出
         imgsz=416,                # GTX 1650 關鍵：降至 416 節省大量顯存
         device=device,            # 指定顯卡進行訓練
