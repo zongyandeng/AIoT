@@ -21,7 +21,7 @@ def train_yolo():
         batch=4,                  # GTX 1650 關鍵：設為 4 或 2 避免顯存溢出
         imgsz=416,                # GTX 1650 關鍵：降至 416 節省大量顯存
         device=device,            # 指定顯卡進行訓練
-        amp=True,                 # 啟用半精度混合訓練 (必開：節省顯存 + 加速)
+        amp=False,                # 專門針對 GTX 1650 關閉 AMP，避免硬體 FP16 計算 Bug 與警告
         workers=2,                # WSL 下優化：設為 2 避免記憶體開銷過大
         cache=False,              # 不快取圖片到記憶體/顯存，保持顯存健康
         save=True,                # 自動保存 best.pt 與 last.pt
