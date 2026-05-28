@@ -54,6 +54,17 @@
 
 ---
 
+### 踩坑 5. 跨平台 Windows 與 WSL 2 檔案鎖定 (File Lock) 導致快取無法刪除
+* **問題描述**：在 WSL 中執行 `rm -f` 指令刪除殘留的 `labels.cache` 快取時，雖然指令成功返回且沒有報錯，但檔案並未被真正刪除，修改時間依然停留在舊時間點，導致重啟訓練時 YOLO 依然載入舊的 4 類別快取。
+* **根本原因**：因為 Windows 端有其他程式（如 VS Code，或是先前跑的 Python 腳本殘留在背景）正在佔用、開啟或鎖定這兩個快取檔案，導致 WSL 內部的 `rm` 受到 Windows 作業系統的檔案鎖定保護而刪除失敗。
+* **改善優化方案**：
+  * **主動出擊，Windows 端物理刪除**：利用 Windows 擁有最高檔案控制權與憑證整合的優勢，直接在 Windows 主機端的 PowerShell 中執行強制物理刪除：
+    `Remove-Item -Force \\wsl.localhost\Ubuntu\home\edison\aiot_workspace\image\Instant_screenshot\relabeled_final_split_1231_RemoveSmallObj\train\labels.cache`
+    `Remove-Item -Force \\wsl.localhost\Ubuntu\home\edison\aiot_workspace\image\Instant_screenshot\relabeled_final_split_1231_RemoveSmallObj\valid\labels.cache`
+  * **成果**：檔案成功被 Windows 物理消滅，徹底解除鎖定！重啟訓練後，YOLO 找不到舊快取，強迫進行 100% 乾淨的 6 類別全新掃描，徹底根治了快取殘留警告！
+
+---
+
 ## 📂 本次新增與優化之核心檔案
 
 所有檔案均已配置於 `/home/edison/aiot_workspace`：
@@ -62,3 +73,4 @@
 2. **`train_low_vram.py`**：專為 GTX 1650 (4GB) 顯存極限優化的首次訓練啟動腳本。
 3. **`resume_train.py`**：一鍵斷點續訓（死掉重啟）腳本，中斷時載入 `last.pt` 從中斷點續練。
 4. **`GTX1650_YOLO_Training_Guide.md`**：超精緻本地知識庫指南。
+
