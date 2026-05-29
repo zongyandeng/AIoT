@@ -4,7 +4,7 @@ import torch
 def resume_yolo_train():
     # 載入最後保存的斷點模型 weights
     # 路徑為：{project}/{name}/weights/last.pt
-    last_model_path = "yolo_low_vram/low_vram_run/weights/last.pt"
+    last_model_path = "runs/detect/yolo_low_vram/low_vram_run-9/weights/last.pt"
     
     print("=" * 50)
     print(f"正在載入斷點模型：{last_model_path} 進行續訓...")
