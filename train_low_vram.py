@@ -12,7 +12,7 @@ def train_yolo():
 
     # 1. 載入輕量化模型 (強烈建議 GTX 1650 4GB 使用 nano 'n' 版本)
     # yolo26n.pt 非常適合 4GB 顯存，訓練速度快且不易 OOM
-    model = YOLO("yolo26n.pt")
+    model = YOLO("yolo11n.pt")
 
     # 2. 開始訓練並應用低顯存優化超參數
     model.train(
