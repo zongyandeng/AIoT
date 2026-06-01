@@ -40,7 +40,7 @@ source_src = "bus.jpg"
 cam = ThreadedCamera(source_src)
 
 # 2. 載入模型
-model = YOLO('yolo11n.pt')
+model = YOLO('runs/detect/yolo_low_vram/low_vram_run-9/weights/best.pt')
 
 print("正在啟動優化後的影像串流... 按下 Ctrl + C 可停止群組運算")
 
