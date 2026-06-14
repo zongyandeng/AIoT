@@ -61,8 +61,12 @@
                         <!-- YOLO annotation overlay visualizer -->
                         <div class="video-placeholder" id="video-placeholder">
                             <video id="webcam-video" autoplay playsinline style="display: none;"></video>
-                            <img src="/bus.jpg" alt="Live Stream" id="live-stream-img">
-                            <canvas id="detection-canvas"></canvas>
+                            <div id="live-stream-placeholder" class="live-stream-placeholder">
+                                <i class="fa-solid fa-video-slash"></i>
+                                <p>即時影像辨識未啟動</p>
+                                <span>請點擊下方「啟動即時辨識」按鈕開始監控邊緣端鏡頭</span>
+                            </div>
+                            <canvas id="detection-canvas" style="display: none;"></canvas>
                         </div>
                         <div class="overlay-info">
                             <span class="fps-counter"><i class="fa-solid fa-bolt"></i> CPU: 12 FPS</span>
@@ -73,7 +77,7 @@
                         <button class="btn btn-primary" id="toggle-stream-btn">
                             <i class="fa-solid fa-play"></i> 啟動即時辨識
                         </button>
-                        <button class="btn btn-secondary" id="save-snapshot-btn">
+                        <button class="btn btn-secondary" id="save-snapshot-btn" disabled>
                             <i class="fa-solid fa-camera"></i> 截圖存檔
                         </button>
                     </div>

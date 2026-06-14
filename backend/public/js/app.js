@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleStreamBtn = document.getElementById('toggle-stream-btn');
     const saveSnapshotBtn = document.getElementById('save-snapshot-btn');
     const webcamVideo = document.getElementById('webcam-video');
-    const liveStreamImg = document.getElementById('live-stream-img');
+    const liveStreamPlaceholder = document.getElementById('live-stream-placeholder');
     const detectionCanvas = document.getElementById('detection-canvas');
     const canvasCtx = detectionCanvas.getContext('2d');
 
@@ -228,9 +228,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     webcamVideo.play();
                     isStreaming = true;
                     
-                    // UI 切換：顯示 Canvas 畫布，隱藏原本靜態示範圖 bus.jpg
+                    // UI 切換：顯示 Canvas 畫布，隱藏靜態佔位區
                     detectionCanvas.style.display = 'block';
-                    liveStreamImg.style.display = 'none';
+                    liveStreamPlaceholder.style.display = 'none';
+                    saveSnapshotBtn.disabled = false;
                     
                     // 啟動 Canvas 繪圖循環
                     drawVideoFrame();
@@ -274,9 +275,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             webcamVideo.srcObject = null;
             
-            // 還原 UI：顯示靜態示範圖，隱藏即時 Canvas
-            liveStreamImg.style.display = 'block';
+            // 還原 UI：顯示靜態佔位區，隱藏即時 Canvas
+            liveStreamPlaceholder.style.display = 'flex';
             detectionCanvas.style.display = 'none';
+            saveSnapshotBtn.disabled = true;
             
             // 清除畫布內容與暫存框線
             canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
@@ -301,21 +303,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 截圖存檔事件
     async function saveSnapshot() {
-        let base64Data = "";
+        if (!isStreaming) return;
         
-        if (isStreaming) {
-            // 若正在進行即時辨識，直接截取繪製了視訊影格和 YOLO 框線的 detectionCanvas 內容
-            base64Data = detectionCanvas.toDataURL('image/jpeg', 0.9);
-        } else {
-            // 若處於暫停/靜態狀態，截取當前 liveStreamImg 影像
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = liveStreamImg.naturalWidth || 640;
-            tempCanvas.height = liveStreamImg.naturalHeight || 480;
-            const tempCtx = tempCanvas.getContext('2d');
-            
-            tempCtx.drawImage(liveStreamImg, 0, 0, tempCanvas.width, tempCanvas.height);
-            base64Data = tempCanvas.toDataURL('image/jpeg', 0.9);
-        }
+        // 直接截取繪製了視訊影格和 YOLO 框線的 detectionCanvas 內容
+        const base64Data = detectionCanvas.toDataURL('image/jpeg', 0.9);
 
         saveSnapshotBtn.disabled = true;
         saveSnapshotBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 儲存中...';
