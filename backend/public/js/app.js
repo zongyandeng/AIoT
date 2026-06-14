@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isStreaming = false;
     let streamObject = null;
     let sendFrameInterval = null;
+    let chartInterval = null;
     let animationFrameId = null;
     let currentDetections = [];
     

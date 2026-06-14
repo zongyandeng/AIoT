@@ -39,4 +39,20 @@ async function testSnapshotAPI() {
   }
 }
 
-testSnapshotAPI();
+async function testFrameAPI() {
+  console.log("開始測試 /api/test-frame YOLO 影格偵測 API...");
+  try {
+    const response = await fetch('http://127.0.0.1:3001/api/test-frame');
+    const result = await response.json();
+    console.log("YOLO 影格偵測 API 回傳結果:", result);
+  } catch (err) {
+    console.error("[失敗] 無法連線至 YOLO 偵測 API:", err.message);
+  }
+}
+
+async function main() {
+  await testSnapshotAPI();
+  await testFrameAPI();
+}
+
+main();

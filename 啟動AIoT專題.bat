@@ -4,7 +4,7 @@ title AIoT Active Safety Defense Platform Launcher
 pushd %~dp0
 
 echo ==================================================
-echo üõ°Ô∏è  AIoT Active Safety Defense Platform Launcher
+echo ?õ°Ô∏? AIoT Active Safety Defense Platform Launcher
 echo ==================================================
 echo.
 echo [1/2] Opening Web Dashboard in browser...

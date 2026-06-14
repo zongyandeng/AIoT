@@ -179,6 +179,32 @@ app.get('/api/gemini-report', async (req, res) => {
   }
 });
 
+// 7. 模擬測試 YOLO 即時偵測端點 (供測試使用)
+app.get('/api/test-frame', (req, res) => {
+  try {
+    console.log("⚙️  [測試] 收到模擬影格辨識請求...");
+    const imgPath = path.join(__dirname, '../bus.jpg');
+    if (!fs.existsSync(imgPath)) {
+      return res.status(500).json({ success: false, error: "找不到 bus.jpg 測試圖片" });
+    }
+    const imgBuffer = fs.readFileSync(imgPath);
+    const base64Img = `data:image/jpeg;base64,${imgBuffer.toString('base64')}`;
+
+    if (shell && shell.childProcess && !shell.childProcess.killed) {
+      const command = {
+        action: "detect",
+        image: base64Img
+      };
+      shell.send(JSON.stringify(command));
+      res.json({ success: true, message: "已將模擬影格送入 Python YOLO Worker，請觀察 stdout 輸出及 Socket.io 廣播！" });
+    } else {
+      res.status(500).json({ success: false, error: "Python YOLO Worker 未就緒或已停止" });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ==========================================================================
 // 🧠 PYTHON YOLO WORKER 行程控制與 IPC 通訊
 // ==========================================================================
@@ -269,6 +295,7 @@ shell.on('message', async function (message) {
     }
     
     if (data.status === 'success' && data.action === 'detect') {
+      console.log(`[YOLO 偵測成功] 影格物件數: ${data.detections.length} | 詳細:`, data.detections.map(d => `${d.className}(${d.confidence})`).join(', '));
       // 1. 將該影格所有邊界框廣播給前端繪製到 Canvas
       io.emit('frame_detections', data.detections);
       
