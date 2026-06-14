@@ -51,8 +51,8 @@ for line in sys.stdin:
                 img_bytes = base64.b64decode(base64_str)
                 img = Image.open(BytesIO(img_bytes))
                 
-                # 執行 YOLO 推論 ( verbose=False 關閉大量除錯日誌，device='cpu' 確保在 CPU 上流暢執行)
-                results = model(img, verbose=False, device='cpu')
+                # 執行 YOLO 推論 ( verbose=False 關閉大量除錯日誌，device='cpu' 確保在 CPU 上流暢執行，conf=0.15 降低置信度門檻以提升日常近景敏感度)
+                results = model(img, verbose=False, device='cpu', conf=0.15)
                 
                 # 收集此張圖片的所有邊界框偵測結果
                 detections = []
