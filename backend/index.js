@@ -184,9 +184,19 @@ const modelPath = path.isAbsolute(yoloModelSetting)
   ? yoloModelSetting 
   : path.join(__dirname, '../', yoloModelSetting);
 
+let pythonPath = path.join(__dirname, '../.venv/bin/python3');
+if (!fs.existsSync(pythonPath)) {
+  const wslVenvPath = '/home/edison/aiot_workspace/.venv/bin/python3';
+  if (fs.existsSync(wslVenvPath)) {
+    pythonPath = wslVenvPath;
+  } else {
+    pythonPath = 'python3';
+  }
+}
+
 let options = {
   mode: 'text',
-  pythonPath: path.join(__dirname, '../.venv/bin/python3'),
+  pythonPath: pythonPath,
   pythonOptions: ['-u'],
   args: ['--model', modelPath] // 將 .env 的模型路徑作為參數帶入 Python
 };
