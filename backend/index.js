@@ -64,7 +64,12 @@ app.post('/api/snapshot', (req, res) => {
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
     const filename = `snapshot_${timestamp}.jpg`;
     
-    const savePath = path.join(__dirname, '../image/Instant_screenshot', filename);
+    const saveDir = path.join(__dirname, '../image/Instant_screenshot');
+    if (!fs.existsSync(saveDir)) {
+      fs.mkdirSync(saveDir, { recursive: true });
+    }
+    
+    const savePath = path.join(saveDir, filename);
     fs.writeFileSync(savePath, buffer);
     
     console.log(`[Snapshot] 截圖已儲存成功: ${filename}`);

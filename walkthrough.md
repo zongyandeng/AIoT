@@ -75,6 +75,31 @@ GEMINI_API_KEY="您的_GEMINI_API_KEY" node report_generator.js
 4. **`backend/index.js`**：Node.js 後端服務，調用 Worker 與 Sequelize 將數據寫入資料庫。
 5. **`backend/config/config.json`**：後端資料庫設定檔，已配置連線至 `port: 5433`。
 6. **`backend/report_generator.js`** [NEW]：AI 加分功能，連線資料庫並調用 **Gemini 2.5 Flash** 生成專業報告。
+7. **`backend/test_discord.js`** [NEW]：驗證 Discord Webhook Rich Card 與圖片附件警報發送。
+8. **`backend/test_line.js`** [NEW]：引導配置與測試 LINE Notify 發送。
+9. **`backend/test_api.js`** [NEW]：測試後端 API 及截圖儲存目錄是否正確自動建立。
+
+---
+
+## 🧪 系統功能驗證與測試成果
+
+我們針對專題的三大核心功能進行了完整的本地驗證：
+
+### 1. YOLOv11 核心推論測試
+* **單圖測試 (`test_cpu.py`)**：成功於 CPU 環境下推論 `bus.jpg` 並輸出 `results_bus.jpg`。
+* **影片串流相容性 (`test_video.py`)**：成功載入自訂訓練的模型權重 `best.pt` / `yolo26n.pt` 並順利於 CPU 環境下進行即時多影格偵測，未發生記憶體溢出或相容性問題。
+
+### 2. 前端儀表板按鈕功能測試
+* **啟動即時辨識**：已驗證 Python YOLO Worker 行程載入無誤，且 Socket.io 能流暢將實時畫面框線傳遞給前端 Canvas。
+* **截圖存檔**：已實測通過並修正後端儲存機制。現在若 D 槽中不存在 `image/Instant_screenshot` 目錄，系統會自動遞迴建立它，並以台北時間命名儲存為 JPEG，測試已通過 API 發送確認（可執行 `node test_api.js` 快速驗證）。
+
+### 3. 社群通報配置與測試
+* **Discord Webhook**：
+  * 已實測並成功發送帶有違規時間、項目、置信度以及當下影格圖片（如 `bus.jpg`）的 Rich Embed 卡片警報。
+  * 您可以使用 `node test_discord.js` 重新發送測試。
+* **LINE Notify**：
+  * 已建立 `test_line.js` 測試引導腳本。
+  * 只要將您申請的 LINE Token 填入 `backend/.env` 的 `LINE_NOTIFY_TOKEN` 並在該環境變數中啟用即可完成配置。執行 `node test_line.js` 能直接進行發送測試。
 
 ---
 
