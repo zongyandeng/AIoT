@@ -31,6 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let safeCount = 0;
     let violationCount = 0;
+    let latestSafeCount = 0;
+    let latestViolationCount = 0;
+    let chartUpdateInterval = null;
 
     // 狀態變數
     let isStreaming = false;
@@ -234,6 +237,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // 每 250ms (4 FPS) 發送影格給後端推論
                     sendFrameInterval = setInterval(sendFrameToServer, 250);
                     
+                    // 每 2 秒 (2000ms) 定時將最新偵測數更新至圖表，保持平滑趨勢
+                    chartUpdateInterval = setInterval(() => {
+                        if (!isStreaming) return;
+                        const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        updateChart(timeStr, latestSafeCount, latestViolationCount);
+                    }, 2000);
+                    
                     // 更新按鈕外觀為「暫停」紅色樣式
                     toggleStreamBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 暫停即時辨識';
                     toggleStreamBtn.classList.remove('btn-primary');
@@ -253,6 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 停止計時器與繪圖循環
             if (sendFrameInterval) clearInterval(sendFrameInterval);
+            if (chartUpdateInterval) clearInterval(chartUpdateInterval);
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             
             // 關閉相機串流軌道
@@ -269,6 +280,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // 清除畫布內容與暫存框線
             canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
             currentDetections = [];
+            
+            // 重置即時計數器與介面顯示
+            latestSafeCount = 0;
+            latestViolationCount = 0;
+            safeCountEl.textContent = '0';
+            violationCountEl.textContent = '0';
             
             // 還原按鈕外觀為「啟動」藍色樣式
             toggleStreamBtn.innerHTML = '<i class="fa-solid fa-play"></i> 啟動即時辨識';
@@ -377,14 +394,9 @@ document.addEventListener('DOMContentLoaded', () => {
             logsWrapper.removeChild(logsWrapper.lastChild);
         }
 
-        // 更新計數器與警報
+        // 歷史日誌不更新即時面板的指標計數器，僅在此寫入輔助日誌
         if (isViolation) {
-            violationCount++;
-            violationCountEl.textContent = violationCount;
-            triggerToastAlert(translateClassName(data.className));
-        } else {
-            safeCount++;
-            safeCountEl.textContent = safeCount;
+            // 歷史日誌載入時不在此觸發 Toast，Toast 改由 new_detection 專責即時觸發
         }
     }
 
@@ -418,6 +430,26 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('frame_detections', (detections) => {
         if (!isStreaming) return;
         currentDetections = detections;
+
+        // 計算當前影格的即時安全與違規計數
+        let frameSafe = 0;
+        let frameViolation = 0;
+
+        detections.forEach(det => {
+            const isViolation = det.className.includes('no-') || det.className === 'violation';
+            if (isViolation) {
+                frameViolation++;
+            } else if (det.className === 'helmet' || det.className === 'vest') {
+                frameSafe++;
+            }
+        });
+
+        latestSafeCount = frameSafe;
+        latestViolationCount = frameViolation;
+
+        // 即時更新指標卡數值
+        safeCountEl.textContent = latestSafeCount;
+        violationCountEl.textContent = latestViolationCount;
     });
 
     // 接收伺服器初始歷史紀錄
@@ -446,14 +478,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 接收非同步寫入資料庫的新違規紀錄 (用於日誌控制台與圖表實時跳動)
+    // 接收非同步寫入資料庫的新違規紀錄 (僅用於日誌控制台與觸發懸浮警告 Toast)
     socket.on('new_detection', (data) => {
         renderLog(data);
         
-        const timeStr = new Date(data.createdAt).toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const isViolation = data.className.includes('no-') || data.className === 'violation';
-        
-        updateChart(timeStr, isViolation ? 0 : 1, isViolation ? 1 : 0);
+        if (isViolation) {
+            triggerToastAlert(translateClassName(data.className));
+        }
     });
 
     // ==========================================================================
