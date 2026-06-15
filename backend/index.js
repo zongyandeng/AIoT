@@ -84,13 +84,6 @@ app.post('/api/snapshot', (req, res) => {
   }
 });
 
-// 新增設定獲取 API，供前端載入 .env 中預設的 RTSP 網址
-app.get('/api/config', (req, res) => {
-  res.json({
-    defaultIpCamUrl: process.env.DEFAULT_IP_CAM_RTSP_URL || ''
-  });
-});
-
 // 暫存當前前端發送過來的影格圖片，當偵測到違規時能作為附件傳送
 let currentFrameBase64 = null;
 let isStreamingActive = false;
@@ -139,9 +132,15 @@ io.on('connection', async (socket) => {
   });
 
   // 前端通知開始 IP Cam 串流
-  socket.on('start_ip_cam', (rtspUrl) => {
+  socket.on('start_ip_cam', () => {
     isStreamingActive = true;
-    console.log(`🎥 前端啟動 IP Cam 即時辨識，網址: ${rtspUrl}`);
+    const rtspUrl = process.env.DEFAULT_IP_CAM_RTSP_URL || '';
+    console.log(`🎥 前端啟動 IP Cam 即時辨識 (由後端載入預設 RTSP 串流)`);
+    
+    if (!rtspUrl) {
+      console.error("❌ 錯誤：未在後端 .env 設定檔中配置 DEFAULT_IP_CAM_RTSP_URL 環境變數！");
+      return;
+    }
     
     if (shell && shell.childProcess && !shell.childProcess.killed) {
       const command = {

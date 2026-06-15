@@ -92,10 +92,12 @@
                             </select>
                         </div>
 
-                        <!-- IP Cam RTSP 網址輸入 (僅在 IP Cam 模式顯示) -->
+                        <!-- IP Cam 說明 (僅在 IP Cam 模式顯示) -->
                         <div class="form-group" id="ipcam-source-group" style="display: none;">
-                            <label for="ipcam-rtsp-input"><i class="fa-solid fa-link"></i> RTSP 串流網址</label>
-                            <input type="text" id="ipcam-rtsp-input" class="text-input" placeholder="rtsp://username:password@ip:port/stream" value="">
+                            <label><i class="fa-solid fa-shield-halved"></i> 網路攝影機連線狀態</label>
+                            <div style="background: rgba(46, 213, 115, 0.1); border: 1px solid rgba(46, 213, 115, 0.2); color: var(--primary); text-align: left; padding: 12px; border-radius: 6px; line-height: 1.6; font-size: 13px;">
+                                <i class="fa-solid fa-circle-check"></i> 安全防護已啟用：系統將自動連線至後端設定檔 (.env) 所配置的預設 IP Cam。網頁端將不會明文傳輸與顯示您的相機帳密。
+                            </div>
                         </div>
                     </div>
 

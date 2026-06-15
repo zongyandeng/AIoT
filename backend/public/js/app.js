@@ -34,7 +34,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const localSourceGroup = document.getElementById('local-source-group');
     const localDeviceSelect = document.getElementById('local-device-select');
     const ipcamSourceGroup = document.getElementById('ipcam-source-group');
-    const ipcamRtspInput = document.getElementById('ipcam-rtsp-input');
 
     let safeCount = 0;
     let violationCount = 0;
@@ -50,20 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let animationFrameId = null;
     let currentDetections = [];
     let latestIpCamImage = null; // 用於儲存後端傳回的最新 IP Cam 影像
-    
-    // 取得後端預設設定 (例如 IP Cam RTSP 網址)
-    async function fetchConfig() {
-        try {
-            const res = await fetch('/api/config');
-            const data = await res.json();
-            if (data && data.defaultIpCamUrl) {
-                ipcamRtspInput.value = data.defaultIpCamUrl;
-            }
-        } catch (err) {
-            console.error("無法取得預設設定:", err);
-        }
-    }
-    fetchConfig();
+
 
     // 偵測並更新本機相機裝置清單
     async function updateCameraList() {
@@ -344,12 +330,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (sourceMode === 'ipcam') {
                 // --- 2. 網路攝影機 IP Cam 模式 ---
-                const rtspUrl = ipcamRtspInput.value.trim();
-                if (!rtspUrl) {
-                    alert("請輸入有效的 IP Cam RTSP 串流網址！");
-                    return;
-                }
-                
                 isStreaming = true;
                 
                 // UI 切換：顯示 Canvas 畫布，隱藏靜態佔位區
@@ -369,9 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleStreamBtn.classList.remove('btn-primary');
                 toggleStreamBtn.classList.add('btn-danger');
                 
-                // 通知後端啟動 IP Cam 串流
-                socket.emit('start_ip_cam', rtspUrl);
-                console.log("[IP Cam] IP Cam 串流已請求啟動:", rtspUrl);
+                // 通知後端啟動 IP Cam 串流 (後端將直接讀取 .env)
+                socket.emit('start_ip_cam');
+                console.log("[IP Cam] IP Cam 串流已請求啟動");
             }
         } else {
             // --- 停止串流 (適用於所有模式) ---
