@@ -29,6 +29,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const detectionCanvas = document.getElementById('detection-canvas');
     const canvasCtx = detectionCanvas.getContext('2d');
 
+    // ⚙️ 影像來源設定元件
+    const videoSourceSelect = document.getElementById('video-source-select');
+    const localSourceGroup = document.getElementById('local-source-group');
+    const localDeviceSelect = document.getElementById('local-device-select');
+    const ipcamSourceGroup = document.getElementById('ipcam-source-group');
+    const ipcamRtspInput = document.getElementById('ipcam-rtsp-input');
+
     let safeCount = 0;
     let violationCount = 0;
     let latestSafeCount = 0;
@@ -42,7 +49,68 @@ document.addEventListener('DOMContentLoaded', () => {
     let chartInterval = null;
     let animationFrameId = null;
     let currentDetections = [];
+    let latestIpCamImage = null; // 用於儲存後端傳回的最新 IP Cam 影像
     
+    // 取得後端預設設定 (例如 IP Cam RTSP 網址)
+    async function fetchConfig() {
+        try {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            if (data && data.defaultIpCamUrl) {
+                ipcamRtspInput.value = data.defaultIpCamUrl;
+            }
+        } catch (err) {
+            console.error("無法取得預設設定:", err);
+        }
+    }
+    fetchConfig();
+
+    // 偵測並更新本機相機裝置清單
+    async function updateCameraList() {
+        try {
+            // 請求相機權限以利 enumerateDevices() 取得裝置名稱
+            const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // 取得權限後立即關閉暫存鏡頭軌道，避免佔用
+            tempStream.getTracks().forEach(track => track.stop());
+            
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            localDeviceSelect.innerHTML = '';
+            if (videoDevices.length === 0) {
+                localDeviceSelect.innerHTML = '<option value="">未偵測到本機/USB 攝影機</option>';
+                return;
+            }
+            videoDevices.forEach((device, index) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${index + 1}`;
+                localDeviceSelect.appendChild(option);
+            });
+        } catch (err) {
+            console.warn("無法取得相機清單 (可能無相機或未授權):", err);
+            localDeviceSelect.innerHTML = '<option value="">無法取得相機 (未授權)</option>';
+        }
+    }
+    updateCameraList();
+
+    // 監聽影像來源切換
+    videoSourceSelect.addEventListener('change', () => {
+        const source = videoSourceSelect.value;
+        if (source === 'local') {
+            localSourceGroup.style.display = 'flex';
+            ipcamSourceGroup.style.display = 'none';
+        } else {
+            localSourceGroup.style.display = 'none';
+            ipcamSourceGroup.style.display = 'flex';
+        }
+        
+        // 切換來源時，如果正在串流則先停止
+        if (isStreaming) {
+            toggleStream();
+        }
+    });
+
     // Socket 連線狀態監聽
     socket.on('connect', () => {
         statusText.textContent = "系統已連線";
@@ -141,23 +209,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 🎥 WEBCAM 視訊與 YOLO 偵測框繪製邏輯
     // ==========================================================================
     
-    // 繪圖循環：負責將視訊與 YOLO 邊界框合併繪製到 Canvas 上
-    function drawVideoFrame() {
-        if (!isStreaming) return;
-
-        // 動態匹配視訊的解析度，確保比例正確
-        if (detectionCanvas.width !== webcamVideo.videoWidth) {
-            detectionCanvas.width = webcamVideo.videoWidth || 640;
-            detectionCanvas.height = webcamVideo.videoHeight || 480;
-        }
-
-        const width = detectionCanvas.width;
-        const height = detectionCanvas.height;
-
-        // 1. 繪製當前視訊畫面影格為底圖
-        canvasCtx.drawImage(webcamVideo, 0, 0, width, height);
-
-        // 2. 依序繪製當前的所有 YOLO 偵測邊界框
+    // 繪製 YOLO 偵測邊界框的共享邏輯
+    function drawDetections(width, height) {
         currentDetections.forEach(det => {
             // 座標解構 (假設 Python 傳回 0.0 ~ 1.0 的相對比例座標)
             const x1 = det.x1 * width;
@@ -187,14 +240,34 @@ document.addEventListener('DOMContentLoaded', () => {
             canvasCtx.fillStyle = '#ffffff';
             canvasCtx.fillText(labelText, x1 + 6, y1 - 7);
         });
+    }
+
+    // 繪圖循環：負責將本機/USB 視訊與 YOLO 邊界框合併繪製到 Canvas 上 (本機模式專用)
+    function drawVideoFrame() {
+        if (!isStreaming || videoSourceSelect.value !== 'local') return;
+
+        // 動態匹配視訊的解析度，確保比例正確
+        if (detectionCanvas.width !== webcamVideo.videoWidth) {
+            detectionCanvas.width = webcamVideo.videoWidth || 640;
+            detectionCanvas.height = webcamVideo.videoHeight || 480;
+        }
+
+        const width = detectionCanvas.width;
+        const height = detectionCanvas.height;
+
+        // 1. 繪製當前視訊畫面影格為底圖
+        canvasCtx.drawImage(webcamVideo, 0, 0, width, height);
+
+        // 2. 依序繪製當前的所有 YOLO 偵測邊界框
+        drawDetections(width, height);
 
         // 遞迴呼叫下一影格
         animationFrameId = requestAnimationFrame(drawVideoFrame);
     }
 
-    // 擷取當前影像並傳送給後端
+    // 擷取當前影像並傳送給後端 (本機模式專用)
     function sendFrameToServer() {
-        if (!isStreaming) return;
+        if (!isStreaming || videoSourceSelect.value !== 'local') return;
 
         // 使用一個隱藏的暫存 Canvas 來壓縮圖片大小以提高傳輸速度 (640x480)
         const tempCanvas = document.createElement('canvas');
@@ -214,53 +287,94 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 啟動/暫停即時辨識事件
     async function toggleStream() {
+        const sourceMode = videoSourceSelect.value;
+        
         if (!isStreaming) {
-            // 開啟鏡頭
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }
-                });
+            if (sourceMode === 'local') {
+                // --- 1. 本機 / USB 攝影機模式 ---
+                try {
+                    const selectedDeviceId = localDeviceSelect.value;
+                    const constraints = {
+                        video: {
+                            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            frameRate: { ideal: 15 }
+                        }
+                    };
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    
+                    streamObject = stream;
+                    webcamVideo.srcObject = stream;
+                    
+                    webcamVideo.onloadedmetadata = () => {
+                        webcamVideo.play();
+                        isStreaming = true;
+                        
+                        // UI 切換：顯示 Canvas 畫布，隱藏靜態佔位區
+                        detectionCanvas.style.display = 'block';
+                        liveStreamPlaceholder.style.display = 'none';
+                        saveSnapshotBtn.disabled = false;
+                        
+                        // 啟動 Canvas 繪圖循環
+                        drawVideoFrame();
+                        
+                        // 每 250ms (4 FPS) 發送影格給後端推論
+                        sendFrameInterval = setInterval(sendFrameToServer, 250);
+                        
+                        // 每 2 秒 (2000ms) 定時將最新偵測數更新至圖表，保持平滑趨勢
+                        chartUpdateInterval = setInterval(() => {
+                            if (!isStreaming) return;
+                            const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            updateChart(timeStr, latestSafeCount, latestViolationCount);
+                        }, 2000);
+                        
+                        // 更新按鈕外觀為「暫停」紅色樣式
+                        toggleStreamBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 暫停即時辨識';
+                        toggleStreamBtn.classList.remove('btn-primary');
+                        toggleStreamBtn.classList.add('btn-danger');
+                        
+                        // 通知後端本機串流已開始
+                        socket.emit('start_stream');
+                        console.log("[Webcam] 本機/USB 鏡頭即時串流已啟動");
+                    };
+                } catch (err) {
+                    console.error("無法存取鏡頭:", err);
+                    alert("無法存取您的視訊鏡頭。請確保已給予瀏覽器相機使用權限。");
+                }
+            } else if (sourceMode === 'ipcam') {
+                // --- 2. 網路攝影機 IP Cam 模式 ---
+                const rtspUrl = ipcamRtspInput.value.trim();
+                if (!rtspUrl) {
+                    alert("請輸入有效的 IP Cam RTSP 串流網址！");
+                    return;
+                }
                 
-                streamObject = stream;
-                webcamVideo.srcObject = stream;
+                isStreaming = true;
                 
-                webcamVideo.onloadedmetadata = () => {
-                    webcamVideo.play();
-                    isStreaming = true;
-                    
-                    // UI 切換：顯示 Canvas 畫布，隱藏靜態佔位區
-                    detectionCanvas.style.display = 'block';
-                    liveStreamPlaceholder.style.display = 'none';
-                    saveSnapshotBtn.disabled = false;
-                    
-                    // 啟動 Canvas 繪圖循環
-                    drawVideoFrame();
-                    
-                    // 每 250ms (4 FPS) 發送影格給後端推論
-                    sendFrameInterval = setInterval(sendFrameToServer, 250);
-                    
-                    // 每 2 秒 (2000ms) 定時將最新偵測數更新至圖表，保持平滑趨勢
-                    chartUpdateInterval = setInterval(() => {
-                        if (!isStreaming) return;
-                        const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                        updateChart(timeStr, latestSafeCount, latestViolationCount);
-                    }, 2000);
-                    
-                    // 更新按鈕外觀為「暫停」紅色樣式
-                    toggleStreamBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 暫停即時辨識';
-                    toggleStreamBtn.classList.remove('btn-primary');
-                    toggleStreamBtn.classList.add('btn-danger');
-                    
-                    // 通知後端串流已開始
-                    socket.emit('start_stream');
-                    console.log("[Webcam] 鏡頭即時串流已啟動");
-                };
-            } catch (err) {
-                console.error("無法存取鏡頭:", err);
-                alert("無法存取您的視訊鏡頭。請確保已給予瀏覽器相機使用權限。");
+                // UI 切換：顯示 Canvas 畫布，隱藏靜態佔位區
+                detectionCanvas.style.display = 'block';
+                liveStreamPlaceholder.style.display = 'none';
+                saveSnapshotBtn.disabled = false;
+                
+                // 每 2 秒 (2000ms) 定時將最新偵測數更新至圖表
+                chartUpdateInterval = setInterval(() => {
+                    if (!isStreaming) return;
+                    const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    updateChart(timeStr, latestSafeCount, latestViolationCount);
+                }, 2000);
+                
+                // 更新按鈕外觀為「暫停」紅色樣式
+                toggleStreamBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 暫停即時辨識';
+                toggleStreamBtn.classList.remove('btn-primary');
+                toggleStreamBtn.classList.add('btn-danger');
+                
+                // 通知後端啟動 IP Cam 串流
+                socket.emit('start_ip_cam', rtspUrl);
+                console.log("[IP Cam] IP Cam 串流已請求啟動:", rtspUrl);
             }
         } else {
-            // 暫停鏡頭
+            // --- 停止串流 (適用於所有模式) ---
             isStreaming = false;
             
             // 停止計時器與繪圖循環
@@ -283,6 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 清除畫布內容與暫存框線
             canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
             currentDetections = [];
+            latestIpCamImage = null;
             
             // 重置即時計數器與介面顯示
             latestSafeCount = 0;
@@ -295,9 +410,15 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleStreamBtn.classList.remove('btn-danger');
             toggleStreamBtn.classList.add('btn-primary');
             
-            // 通知後端串流已停止
-            socket.emit('stop_stream');
-            console.log("[Webcam] 鏡頭即時串流已關閉");
+            if (sourceMode === 'local') {
+                // 通知後端串流已停止
+                socket.emit('stop_stream');
+                console.log("[Webcam] 本機/USB 鏡頭即時串流已關閉");
+            } else {
+                // 通知後端停止 IP Cam 串流
+                socket.emit('stop_ip_cam');
+                console.log("[IP Cam] IP Cam 串流已關閉");
+            }
         }
     }
 
@@ -442,6 +563,52 @@ document.addEventListener('DOMContentLoaded', () => {
         // 即時更新指標卡數值
         safeCountEl.textContent = latestSafeCount;
         violationCountEl.textContent = latestViolationCount;
+    });
+
+    // 接收後端推送的 IP Cam 影格與 YOLO 偵測結果
+    socket.on('ip_cam_frame', (data) => {
+        if (!isStreaming || videoSourceSelect.value !== 'ipcam') return;
+        
+        currentDetections = data.detections;
+        
+        // 1. 計算當前影格的即時安全與違規計數
+        let frameSafe = 0;
+        let frameViolation = 0;
+        currentDetections.forEach(det => {
+            const isViolation = det.className.includes('no-') || det.className === 'violation';
+            if (isViolation) {
+                frameViolation++;
+            } else if (det.className === 'helmet' || det.className === 'vest') {
+                frameSafe++;
+            }
+        });
+        latestSafeCount = frameSafe;
+        latestViolationCount = frameViolation;
+        
+        safeCountEl.textContent = latestSafeCount;
+        violationCountEl.textContent = latestViolationCount;
+        
+        // 2. 將接收到的 base64 影像渲染到 Canvas 上
+        if (data.image) {
+            const img = new Image();
+            img.onload = () => {
+                latestIpCamImage = img;
+                if (!isStreaming || videoSourceSelect.value !== 'ipcam') return;
+                
+                if (detectionCanvas.width !== img.width) {
+                    detectionCanvas.width = img.width || 640;
+                    detectionCanvas.height = img.height || 480;
+                }
+                const width = detectionCanvas.width;
+                const height = detectionCanvas.height;
+                
+                // 繪製底圖
+                canvasCtx.drawImage(img, 0, 0, width, height);
+                // 繪製 YOLO 偵測框
+                drawDetections(width, height);
+            };
+            img.src = data.image;
+        }
     });
 
     // 接收伺服器初始歷史紀錄

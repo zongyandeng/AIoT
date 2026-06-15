@@ -84,6 +84,13 @@ app.post('/api/snapshot', (req, res) => {
   }
 });
 
+// 新增設定獲取 API，供前端載入 .env 中預設的 RTSP 網址
+app.get('/api/config', (req, res) => {
+  res.json({
+    defaultIpCamUrl: process.env.DEFAULT_IP_CAM_RTSP_URL || ''
+  });
+});
+
 // 暫存當前前端發送過來的影格圖片，當偵測到違規時能作為附件傳送
 let currentFrameBase64 = null;
 let isStreamingActive = false;
@@ -118,17 +125,45 @@ io.on('connection', async (socket) => {
     }
   });
 
-  // 前端通知開始即時辨識
+  // 前端通知開始即時辨識 (本機鏡頭)
   socket.on('start_stream', () => {
     isStreamingActive = true;
     console.log("🎥 前端啟動即時辨識鏡頭");
   });
 
-  // 前端通知暫停即時辨識
+  // 前端通知暫停即時辨識 (本機鏡頭)
   socket.on('stop_stream', () => {
     isStreamingActive = false;
     currentFrameBase64 = null;
     console.log("⏸️ 前端暫停即時辨識鏡頭");
+  });
+
+  // 前端通知開始 IP Cam 串流
+  socket.on('start_ip_cam', (rtspUrl) => {
+    isStreamingActive = true;
+    console.log(`🎥 前端啟動 IP Cam 即時辨識，網址: ${rtspUrl}`);
+    
+    if (shell && shell.childProcess && !shell.childProcess.killed) {
+      const command = {
+        action: "start_ip_cam",
+        rtsp_url: rtspUrl
+      };
+      shell.send(JSON.stringify(command));
+    }
+  });
+
+  // 前端通知暫停 IP Cam 串流
+  socket.on('stop_ip_cam', () => {
+    isStreamingActive = false;
+    currentFrameBase64 = null;
+    console.log("⏸️ 前端暫停 IP Cam 即時辨識");
+    
+    if (shell && shell.childProcess && !shell.childProcess.killed) {
+      const command = {
+        action: "stop_ip_cam"
+      };
+      shell.send(JSON.stringify(command));
+    }
   });
 
   socket.on('disconnect', () => {
@@ -304,6 +339,23 @@ shell.on('message', async function (message) {
       io.emit('frame_detections', data.detections);
       
       // 2. 異步檢查並處理每個邊界框是否包含違規行為
+      for (const det of data.detections) {
+        handleViolation(det);
+      }
+    } else if (data.status === 'success' && data.action === 'ip_cam_frame') {
+      // 網路攝影機 IP Cam 的辨識回報
+      console.log(`[IP Cam YOLO 偵測成功] 物件數: ${data.detections.length}`);
+      
+      // 1. 將影像更新為當前影格以利違規通報擷取
+      currentFrameBase64 = data.image;
+      
+      // 2. 廣播給所有前端繪製
+      io.emit('ip_cam_frame', {
+        image: data.image,
+        detections: data.detections
+      });
+      
+      // 3. 檢查違規行為
       for (const det of data.detections) {
         handleViolation(det);
       }

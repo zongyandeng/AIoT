@@ -73,6 +73,32 @@
                             <span class="resolution">640x640</span>
                         </div>
                     </div>
+                    
+                    <!-- 影像來源選擇與設定區塊 -->
+                    <div class="source-panel">
+                        <div class="form-group">
+                            <label for="video-source-select"><i class="fa-solid fa-circle-play"></i> 影像來源</label>
+                            <select id="video-source-select" class="select-input">
+                                <option value="local">本機 / USB 攝影機</option>
+                                <option value="ipcam">網路攝影機 IP Cam (RTSP)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- USB 相機選擇 (僅在本機模式顯示) -->
+                        <div class="form-group" id="local-source-group">
+                            <label for="local-device-select"><i class="fa-solid fa-camera-rotate"></i> 選擇本機相機裝置</label>
+                            <select id="local-device-select" class="select-input">
+                                <option value="">正在偵測相機裝置...</option>
+                            </select>
+                        </div>
+
+                        <!-- IP Cam RTSP 網址輸入 (僅在 IP Cam 模式顯示) -->
+                        <div class="form-group" id="ipcam-source-group" style="display: none;">
+                            <label for="ipcam-rtsp-input"><i class="fa-solid fa-link"></i> RTSP 串流網址</label>
+                            <input type="text" id="ipcam-rtsp-input" class="text-input" placeholder="rtsp://username:password@ip:port/stream" value="">
+                        </div>
+                    </div>
+
                     <div class="control-panel">
                         <button class="btn btn-primary" id="toggle-stream-btn">
                             <i class="fa-solid fa-play"></i> 啟動即時辨識
