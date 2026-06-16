@@ -20,6 +20,98 @@
     <script src="/socket.io/socket.io.js"></script>
     
     <link rel="stylesheet" href="/css/style.css">
+    
+    <!-- 影片回放 Modal 與電子圍籬專用樣式 -->
+    <style>
+        .video-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .video-modal.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .video-modal-content {
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 640px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .video-modal.show .video-modal-content {
+            transform: scale(1);
+        }
+        .video-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        .video-modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .close-modal-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 28px;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+        .close-modal-btn:hover {
+            color: #ef4444;
+        }
+        .video-modal-body {
+            padding: 20px;
+            background: #0f172a;
+        }
+        
+        /* 圍籬編輯模式的視覺提示 */
+        .video-container.editing-fence {
+            border: 2px dashed var(--danger);
+            cursor: crosshair;
+        }
+        .fence-hint {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+    </style>
 </head>
 <body>
 
@@ -101,12 +193,18 @@
                         </div>
                     </div>
 
-                    <div class="control-panel">
-                        <button class="btn btn-primary" id="toggle-stream-btn">
+                    <div class="control-panel" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <button class="btn btn-primary" id="toggle-stream-btn" style="flex: 1; min-width: 140px;">
                             <i class="fa-solid fa-play"></i> 啟動即時辨識
                         </button>
-                        <button class="btn btn-secondary" id="save-snapshot-btn" disabled>
-                            <i class="fa-solid fa-camera"></i> 截圖存檔
+                        <button class="btn btn-secondary" id="save-snapshot-btn" disabled style="flex: 1; min-width: 100px;">
+                            <i class="fa-solid fa-camera"></i> 截圖
+                        </button>
+                        <button class="btn btn-secondary" id="toggle-fence-btn" style="flex: 1; min-width: 130px;" title="繪製電子圍籬範圍">
+                            <i class="fa-solid fa-draw-polygon"></i> 設置圍籬
+                        </button>
+                        <button class="btn btn-danger" id="clear-fence-btn" style="display: none; flex: 1; min-width: 130px;">
+                            <i class="fa-solid fa-trash-can"></i> 清除圍籬
                         </button>
                     </div>
                 </div>
@@ -203,6 +301,19 @@
         <div class="toast-body">
             <h4 class="toast-title">工安違規警告</h4>
             <p class="toast-desc">偵測到人員未戴安全帽 / 未穿反光背心！</p>
+        </div>
+    </div>
+
+    <!-- Video Modal -->
+    <div class="video-modal" id="video-modal">
+        <div class="video-modal-content">
+            <div class="video-modal-header">
+                <h3><i class="fa-solid fa-circle-play"></i> 違規影像回放 (前後10秒)</h3>
+                <button class="close-modal-btn" id="close-modal-btn">&times;</button>
+            </div>
+            <div class="video-modal-body">
+                <video id="modal-video-player" controls style="width: 100%; border-radius: 8px; display: block;"></video>
+            </div>
         </div>
     </div>
 

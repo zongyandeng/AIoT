@@ -28,8 +28,14 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { PythonShell } = require('python-shell');
 const { Detection } = require('./models');
+// 自動在啟動時更新 PostgreSQL 的 Table Schema
+require('./models').sequelize.sync({ alter: true })
+  .then(() => console.log("[Database] Table Schema 已同步/更新成功"))
+  .catch(err => console.error("❌ [Database] Table Schema 同步失敗:", err.message));
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { sendAlert } = require('./notifier');
+const multer = require('multer');
 
 const app = express();
 const server = http.createServer(app);
@@ -84,11 +90,67 @@ app.post('/api/snapshot', (req, res) => {
   }
 });
 
+// 5. 影片上傳 API (記憶體快取後寫入，避免硬碟寫入碎片)
+const upload = multer({ storage: multer.memoryStorage() });
+app.post('/api/upload-video', upload.single('video'), async (req, res) => {
+  try {
+    const { detectionId } = req.body;
+    const file = req.file;
+    
+    if (!detectionId || !file) {
+      return res.status(400).json({ success: false, error: '缺少 detectionId 或 video 檔案' });
+    }
+    
+    const saveDir = path.join(__dirname, 'public/videos');
+    if (!fs.existsSync(saveDir)) {
+      fs.mkdirSync(saveDir, { recursive: true });
+    }
+    
+    const filename = `violation_${detectionId}.webm`;
+    const savePath = path.join(saveDir, filename);
+    
+    // 寫入影片檔案
+    fs.writeFileSync(savePath, file.buffer);
+    
+    // 更新資料庫中對應違規紀錄的影片欄位
+    const videoPath = `/videos/${filename}`;
+    await Detection.update({ videoPath: videoPath }, {
+      where: { id: parseInt(detectionId) }
+    });
+    
+    console.log(`🎥 [Video] 違規預錄影片上傳成功，關聯至 ID: ${detectionId} (${videoPath})`);
+    
+    // 廣播給所有前端通知影片就緒
+    io.emit('video_ready', { id: parseInt(detectionId), videoPath: videoPath });
+    
+    res.json({ success: true, videoPath: videoPath });
+  } catch (error) {
+    console.error('[Video 上傳失敗]', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 暫存當前前端發送過來的影格圖片，當偵測到違規時能作為附件傳送
 let currentFrameBase64 = null;
 let isStreamingActive = false;
 
-// 5. Socket.io 通訊中心
+// 5. 電子圍籬 (Virtual Fences) 幾何判定與全域儲存
+let activeFence = null; // 格式: [[x1, y1], [x2, y2], ...]
+
+function isPointInPolygon(point, polygon) {
+  const x = point[0], y = point[1];
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+    const intersect = ((yi > y) !== (yj > y))
+        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// 6. Socket.io 通訊中心
 io.on('connection', async (socket) => {
   console.log(`🔌 瀏覽器前端已連線，Socket ID: ${socket.id}`);
 
@@ -99,9 +161,25 @@ io.on('connection', async (socket) => {
       order: [['createdAt', 'DESC']]
     });
     socket.emit('initial_data', history);
+    
+    // 同步當前的電子圍籬設定給新連線的前端
+    socket.emit('sync_fence', activeFence);
   } catch (error) {
     console.error("❌ 無法載入資料庫初始數據:", error.message);
   }
+
+  // 接收前端發送的圍籬設定
+  socket.on('save_fence', (vertices) => {
+    activeFence = vertices;
+    console.log("📐 [Fence] 收到前端設定的電子圍籬:", activeFence);
+    socket.broadcast.emit('sync_fence', activeFence);
+  });
+
+  socket.on('clear_fence', () => {
+    activeFence = null;
+    console.log("📐 [Fence] 已清除電子圍籬");
+    socket.broadcast.emit('sync_fence', null);
+  });
 
   // 接收前端發送的實時視訊影格 (方案 A)
   socket.on('client_frame', (base64Img) => {
@@ -284,6 +362,15 @@ async function handleViolation(det) {
   // 只處理帶有 'no-' 的違規或是 violation 類別
   const isViolation = className.includes('no-') || className === 'violation';
   if (!isViolation) return;
+
+  // 判定是否落入電子圍籬內 (若有啟用圍籬)
+  if (activeFence && activeFence.length >= 3) {
+    const px = (det.x1 + det.x2) / 2;
+    const py = det.y2; // 人員底部中心點
+    if (!isPointInPolygon([px, py], activeFence)) {
+      return; // 不在圍籬內，直接跳過 (不記錄、不警報)
+    }
+  }
 
   const now = Date.now();
   if (dbCooldowns.has(className)) {

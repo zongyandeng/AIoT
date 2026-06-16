@@ -15,7 +15,8 @@ module.exports = (sequelize, DataTypes) => {
   }
   Detection.init({
     className: DataTypes.STRING,
-    confidence: DataTypes.FLOAT
+    confidence: DataTypes.FLOAT,
+    videoPath: DataTypes.STRING
   }, {
     sequelize,
     modelName: 'Detection',

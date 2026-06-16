@@ -29,6 +29,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const detectionCanvas = document.getElementById('detection-canvas');
     const canvasCtx = detectionCanvas.getContext('2d');
 
+    // 📐 電子圍籬與影片 Modal 元件
+    const toggleFenceBtn = document.getElementById('toggle-fence-btn');
+    const clearFenceBtn = document.getElementById('clear-fence-btn');
+    const videoModal = document.getElementById('video-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalVideoPlayer = document.getElementById('modal-video-player');
+
+    // 電子圍籬狀態變數
+    let fenceVertices = []; // 格式: [[rx, ry], ...]
+    let isEditingFence = false;
+
+    // 預錄影狀態變數
+    let mediaRecorder = null;
+    let preRecordChunks = [];
+    let isRecordingViolation = false;
+    let activeViolationId = null;
+    let postRecordTimeout = null;
+
     // ⚙️ 影像來源設定元件
     const videoSourceSelect = document.getElementById('video-source-select');
     const localSourceGroup = document.getElementById('local-source-group');
@@ -195,8 +213,46 @@ document.addEventListener('DOMContentLoaded', () => {
     // 🎥 WEBCAM 視訊與 YOLO 偵測框繪製邏輯
     // ==========================================================================
     
+    // 📐 繪製電子圍籬區域
+    function drawFence(width, height) {
+        if (fenceVertices.length === 0) return;
+        
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(fenceVertices[0][0] * width, fenceVertices[0][1] * height);
+        for (let i = 1; i < fenceVertices.length; i++) {
+            canvasCtx.lineTo(fenceVertices[i][0] * width, fenceVertices[i][1] * height);
+        }
+        
+        if (isEditingFence) {
+            // 編輯模式：繪製紅色虛線與圓形頂點
+            canvasCtx.strokeStyle = '#ff4757';
+            canvasCtx.lineWidth = 2;
+            canvasCtx.setLineDash([6, 6]);
+            canvasCtx.stroke();
+            canvasCtx.setLineDash([]);
+            
+            fenceVertices.forEach(pt => {
+                canvasCtx.fillStyle = '#ff4757';
+                canvasCtx.beginPath();
+                canvasCtx.arc(pt[0] * width, pt[1] * height, 6, 0, Math.PI * 2);
+                canvasCtx.fill();
+            });
+        } else {
+            // 儲存模式：閉合區域並塗上透明淡紅
+            canvasCtx.closePath();
+            canvasCtx.fillStyle = 'rgba(255, 71, 87, 0.12)';
+            canvasCtx.fill();
+            canvasCtx.strokeStyle = 'rgba(255, 71, 87, 0.65)';
+            canvasCtx.lineWidth = 2.5;
+            canvasCtx.stroke();
+        }
+    }
+
     // 繪製 YOLO 偵測邊界框的共享邏輯
     function drawDetections(width, height) {
+        // 先繪製電子圍籬背景，避免遮擋邊界框
+        drawFence(width, height);
+
         currentDetections.forEach(det => {
             // 座標解構 (假設 Python 傳回 0.0 ~ 1.0 的相對比例座標)
             const x1 = det.x1 * width;
@@ -323,6 +379,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         // 通知後端本機串流已開始
                         socket.emit('start_stream');
                         console.log("[Webcam] 本機/USB 鏡頭即時串流已啟動");
+                        
+                        // 啟動預錄影系統
+                        startRecordingSystem();
                     };
                 } catch (err) {
                     console.error("無法存取鏡頭:", err);
@@ -352,6 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 通知後端啟動 IP Cam 串流 (後端將直接讀取 .env)
                 socket.emit('start_ip_cam');
                 console.log("[IP Cam] IP Cam 串流已請求啟動");
+                
+                // IP Cam 也同樣使用 Canvas 渲染，開啟預錄影系統
+                startRecordingSystem();
             }
         } else {
             // --- 停止串流 (適用於所有模式) ---
@@ -368,6 +430,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 streamObject = null;
             }
             webcamVideo.srcObject = null;
+            
+            // 關閉預錄影系統
+            stopRecordingSystem();
             
             // 還原 UI：顯示靜態佔位區，隱藏即時 Canvas
             liveStreamPlaceholder.style.display = 'flex';
@@ -465,8 +530,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const timestamp = new Date(data.createdAt).toLocaleTimeString('zh-TW');
 
+        const videoBtn = data.videoPath 
+            ? `<button class="btn-play-video" data-video="${data.videoPath}" style="margin-left: 8px; padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid var(--primary); background: rgba(37, 99, 235, 0.1); color: var(--primary); cursor: pointer;"><i class="fa-solid fa-play"></i> 回放</button>` 
+            : '';
+
         const logHtml = `
-            <div class="log-item">
+            <div class="log-item" id="log-item-${data.id}">
                 <div class="log-left">
                     <span class="log-indicator ${indicatorClass}"></span>
                     <div>
@@ -477,6 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="log-right">
                     <span class="log-conf">Acc: ${(data.confidence * 100).toFixed(0)}%</span>
                     <span class="status-tag ${tagClass}">${tagText}</span>
+                    ${videoBtn}
                 </div>
             </div>
         `;
@@ -617,13 +687,55 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 接收非同步寫入資料庫的新違規紀錄 (僅用於日誌控制台與觸發懸浮警告 Toast)
+    // 接收非同步寫入資料庫的新違規紀錄 (僅用於日誌控制台、觸發警告與啟動錄影)
     socket.on('new_detection', (data) => {
         renderLog(data);
         
         const isViolation = data.className.includes('no-') || data.className === 'violation';
         if (isViolation) {
             triggerToastAlert(translateClassName(data.className));
+            
+            // 觸發前端 5+5 秒雙向預錄影片生成與上傳
+            if (mediaRecorder && mediaRecorder.state !== 'inactive' && !isRecordingViolation) {
+                isRecordingViolation = true;
+                activeViolationId = data.id;
+                console.log(`🎥 [Recorder] 偵測到違規事件 ID ${data.id}，將在 5 秒後合成並上傳預錄影片`);
+                
+                postRecordTimeout = setTimeout(() => {
+                    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                        // 停止錄影以觸發 onstop
+                        mediaRecorder.onstop = async () => {
+                            const blob = new Blob(preRecordChunks, { type: 'video/webm' });
+                            
+                            const formData = new FormData();
+                            formData.append('video', blob, `violation_${activeViolationId}.webm`);
+                            formData.append('detectionId', activeViolationId);
+                            
+                            try {
+                                console.log(`📤 [Recorder] 正在上傳違規錄影 (ID: ${activeViolationId})...`);
+                                const response = await fetch('/api/upload-video', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                const result = await response.json();
+                                if (result.success) {
+                                    console.log(`✅ [Recorder] 影片上傳成功: ${result.videoPath}`);
+                                } else {
+                                    console.error(`❌ [Recorder] 影片上傳失敗: ${result.error}`);
+                                }
+                            } catch (err) {
+                                console.error("上傳影片錯誤:", err);
+                            }
+                            
+                            // 重新初始化錄影系統，回到預錄循環
+                            isRecordingViolation = false;
+                            activeViolationId = null;
+                            startRecordingSystem();
+                        };
+                        mediaRecorder.stop();
+                    }
+                }, 5000);
+            }
         }
     });
 
@@ -725,5 +837,173 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+    });
+
+    // ==========================================================================
+    // 🎥 MediaRecorder 預錄影管理系統
+    // ==========================================================================
+    function startRecordingSystem() {
+        try {
+            preRecordChunks = [];
+            isRecordingViolation = false;
+            activeViolationId = null;
+            if (postRecordTimeout) clearTimeout(postRecordTimeout);
+
+            const stream = detectionCanvas.captureStream(10); // 限制 10 FPS
+            let options = { mimeType: 'video/webm;codecs=vp8' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options = { mimeType: 'video/webm' };
+            }
+            
+            mediaRecorder = new MediaRecorder(stream, options);
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    preRecordChunks.push(e.data);
+                    // 如果沒有在錄製違規影片，維持 5 秒的環形預錄緩衝
+                    if (!isRecordingViolation && preRecordChunks.length > 5) {
+                        preRecordChunks.shift();
+                    }
+                }
+            };
+            mediaRecorder.start(1000); // 每 1 秒產出一個 chunk
+            console.log("[Recorder] 預錄影系統啟動，每秒輪替環形緩衝區");
+        } catch (err) {
+            console.warn("無法啟動 MediaRecorder 預錄影系統:", err);
+        }
+    }
+
+    function stopRecordingSystem() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        mediaRecorder = null;
+        preRecordChunks = [];
+        isRecordingViolation = false;
+        activeViolationId = null;
+        if (postRecordTimeout) clearTimeout(postRecordTimeout);
+        console.log("[Recorder] 預錄影系統已停用");
+    }
+
+    // ==========================================================================
+    // 📐 電子圍籬 (Virtual Fences) 前端編輯與繪製控制
+    // ==========================================================================
+    
+    // 監聽後端圍籬同步事件
+    socket.on('sync_fence', (fence) => {
+        fenceVertices = fence || [];
+        if (fenceVertices.length > 0) {
+            clearFenceBtn.style.display = 'block';
+        } else {
+            clearFenceBtn.style.display = 'none';
+        }
+        // 如果此時未在串流，可以不用繪製，但在有畫面時會自動在下次渲染套用
+    });
+
+    // 點擊「設置圍籬」按鈕
+    toggleFenceBtn.addEventListener('click', () => {
+        const videoContainer = document.querySelector('.video-container');
+        
+        if (!isEditingFence) {
+            // 進入編輯模式
+            isEditingFence = true;
+            fenceVertices = []; // 清空舊的頂點重新畫
+            toggleFenceBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> 儲存圍籬';
+            toggleFenceBtn.classList.remove('btn-secondary');
+            toggleFenceBtn.classList.add('btn-success');
+            clearFenceBtn.style.display = 'none';
+            videoContainer.classList.add('editing-fence');
+
+            // 插入浮動提示
+            const hint = document.createElement('div');
+            hint.className = 'fence-hint';
+            hint.id = 'fence-hint';
+            hint.innerHTML = '<i class="fa-solid fa-circle-info"></i> 請在上方畫面上點選以建立多邊形，最後點選「儲存圍籬」';
+            videoContainer.appendChild(hint);
+        } else {
+            // 儲存並退出編輯模式
+            isEditingFence = false;
+            toggleFenceBtn.innerHTML = '<i class="fa-solid fa-draw-polygon"></i> 設置圍籬';
+            toggleFenceBtn.classList.remove('btn-success');
+            toggleFenceBtn.classList.add('btn-secondary');
+            videoContainer.classList.remove('editing-fence');
+
+            const hint = document.getElementById('fence-hint');
+            if (hint) hint.remove();
+
+            if (fenceVertices.length >= 3) {
+                // 傳送設定給後端
+                socket.emit('save_fence', fenceVertices);
+                localStorage.setItem('yolo_fence', JSON.stringify(fenceVertices));
+                clearFenceBtn.style.display = 'block';
+                console.log("📐 [Fence] 電子圍籬設定成功並已同步");
+            } else {
+                alert("電子圍籬必須包含至少 3 個頂點！設定已自動取消。");
+                fenceVertices = [];
+                socket.emit('clear_fence');
+                localStorage.removeItem('yolo_fence');
+                clearFenceBtn.style.display = 'none';
+            }
+        }
+    });
+
+    // 點擊「清除圍籬」按鈕
+    clearFenceBtn.addEventListener('click', () => {
+        fenceVertices = [];
+        socket.emit('clear_fence');
+        localStorage.removeItem('yolo_fence');
+        clearFenceBtn.style.display = 'none';
+        console.log("📐 [Fence] 電子圍籬已清除");
+    });
+
+    // 監聽 Canvas 上的滑鼠點選，繪製多邊形頂點
+    detectionCanvas.addEventListener('mousedown', (e) => {
+        if (!isEditingFence) return;
+        
+        const rect = detectionCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // 換算成 0.0 ~ 1.0 的相對比例座標
+        const rx = x / rect.width;
+        const ry = y / rect.height;
+        
+        fenceVertices.push([rx, ry]);
+        console.log(`[Fence Point] Added point: (${rx.toFixed(3)}, ${ry.toFixed(3)})`);
+    });
+
+    // ==========================================================================
+    // 🎥 影片回放 Modal 控制與事件監聽
+    // ==========================================================================
+    
+    // 關閉 Modal
+    closeModalBtn.addEventListener('click', () => {
+        videoModal.classList.remove('show');
+        modalVideoPlayer.pause();
+        modalVideoPlayer.src = '';
+    });
+
+    // 監聽日誌列表的「回放影片」按鈕點擊 (使用 Event Delegation)
+    logsWrapper.addEventListener('click', (e) => {
+        const playBtn = e.target.closest('.btn-play-video');
+        if (playBtn) {
+            const videoUrl = playBtn.getAttribute('data-video');
+            if (videoUrl) {
+                modalVideoPlayer.src = videoUrl;
+                videoModal.classList.add('show');
+                modalVideoPlayer.play();
+            }
+        }
+    });
+
+    // 監聽後端影片就緒廣播，動態將「回放」按鈕插入現有日誌項目中
+    socket.on('video_ready', (data) => {
+        const logItem = document.getElementById(`log-item-${data.id}`);
+        if (logItem) {
+            const logRight = logItem.querySelector('.log-right');
+            if (logRight && !logRight.querySelector('.btn-play-video')) {
+                const btnHtml = `<button class="btn-play-video" data-video="${data.videoPath}" style="margin-left: 8px; padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid var(--primary); background: rgba(37, 99, 235, 0.1); color: var(--primary); cursor: pointer;"><i class="fa-solid fa-play"></i> 回放</button>`;
+                logRight.insertAdjacentHTML('beforeend', btnHtml);
+            }
+        }
     });
 });
