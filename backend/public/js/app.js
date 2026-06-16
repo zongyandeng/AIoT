@@ -1028,9 +1028,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
+        // 防禦性設計：避免 rect 寬高為 0 導致 rx, ry 變成 NaN 或 Infinity
+        const w = rect.width > 0 ? rect.width : (detectionCanvas.width || 640);
+        const h = rect.height > 0 ? rect.height : (detectionCanvas.height || 640);
+        
         // 換算成 0.0 ~ 1.0 的相對比例座標
-        const rx = x / rect.width;
-        const ry = y / rect.height;
+        const rx = x / w;
+        const ry = y / h;
         
         fenceVertices.push([rx, ry]);
         console.log(`[Fence Point] Added point: (${rx.toFixed(3)}, ${ry.toFixed(3)})`);
