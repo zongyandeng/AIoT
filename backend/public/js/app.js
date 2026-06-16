@@ -250,9 +250,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 📐 在沒有即時串流時手動重新繪製電子圍籬的靜態方法
     function redrawFenceStatic() {
-        if (!detectionCanvas.width || detectionCanvas.width === 0) {
+        const rect = detectionCanvas.getBoundingClientRect();
+        if (rect && rect.width > 0) {
+            detectionCanvas.width = rect.width;
+            detectionCanvas.height = rect.height;
+        } else {
             detectionCanvas.width = 640;
-            detectionCanvas.height = 480;
+            detectionCanvas.height = 640;
         }
         const width = detectionCanvas.width;
         const height = detectionCanvas.height;
@@ -943,9 +947,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // 如果沒有在串流，我們也需要顯示 canvas，好讓使用者點擊繪製
             if (!isStreaming) {
                 detectionCanvas.style.display = 'block';
-                if (!detectionCanvas.width || detectionCanvas.width === 0) {
+                const rect = detectionCanvas.getBoundingClientRect();
+                if (rect && rect.width > 0) {
+                    detectionCanvas.width = rect.width;
+                    detectionCanvas.height = rect.height;
+                } else {
                     detectionCanvas.width = 640;
-                    detectionCanvas.height = 480;
+                    detectionCanvas.height = 640;
                 }
                 canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
             }
