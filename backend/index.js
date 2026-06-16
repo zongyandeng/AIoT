@@ -34,7 +34,7 @@ require('./models').sequelize.sync({ alter: true })
   .catch(err => console.error("❌ [Database] Table Schema 同步失敗:", err.message));
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { sendAlert } = require('./notifier');
+const { sendAlert, sendVideoAlert } = require('./notifier');
 const multer = require('multer');
 
 const app = express();
@@ -122,6 +122,11 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
     
     // 廣播給所有前端通知影片就緒
     io.emit('video_ready', { id: parseInt(detectionId), videoPath: videoPath });
+    
+    // 非同步傳送影片回放至 Discord
+    sendVideoAlert(parseInt(detectionId), videoPath).catch(err => {
+      console.error('[Video Alert] Discord 影片傳送失敗:', err.message);
+    });
     
     res.json({ success: true, videoPath: videoPath });
   } catch (error) {

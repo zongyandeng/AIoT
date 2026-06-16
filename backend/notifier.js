@@ -146,6 +146,56 @@ async function sendToLine(token, alertName, confidence, timeStr, imageBuffer) {
   console.log('[Notifier] LINE Notify 警報發送成功！');
 }
 
+/**
+ * 傳送 10 秒影片回放至 Discord Webhook
+ * @param {number} detectionId 違規紀錄 ID
+ * @param {string} videoPath 影片相對路徑 (例如 '/videos/violation_123.webm')
+ */
+async function sendVideoAlert(detectionId, videoPath) {
+  if (getEnv('ENABLE_DISCORD', 'false') !== 'true') return;
+  const discordUrl = getEnv('DISCORD_WEBHOOK_URL', '');
+  if (!discordUrl) {
+    console.warn('[Notifier] Discord 啟用但未設定 DISCORD_WEBHOOK_URL，跳過影片發送。');
+    return;
+  }
+
+  // 取得影片絕對路徑 (注意 backend/notifier.js 所在路徑是 backend/，影片放在 backend/public/videos/)
+  const cleanVideoPath = videoPath.replace(/^\//, '');
+  const fullPath = path.join(__dirname, 'public', cleanVideoPath);
+  if (!fs.existsSync(fullPath)) {
+    console.error(`[Notifier] 找不到影片檔案: ${fullPath}，無法傳送至 Discord。`);
+    return;
+  }
+
+  console.log(`[Notifier] 開始傳送影片回放至 Discord: ID ${detectionId}`);
+  const videoBuffer = fs.readFileSync(fullPath);
+
+  // 構造 Discord payload_json
+  const payload = {
+    content: `🎥 **[AIoT 安全違規] 10 秒精彩畫面回放 (違規事件 ID: ${detectionId})**`
+  };
+
+  const formData = new FormData();
+  formData.append('payload_json', JSON.stringify(payload));
+  
+  // 轉為 Blob 並附加到 files
+  const blob = new Blob([videoBuffer], { type: 'video/webm' });
+  formData.append('files[0]', blob, `violation_${detectionId}.webm`);
+
+  const response = await fetch(discordUrl, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Discord 影片傳送錯誤 (${response.status}): ${text}`);
+  }
+  console.log(`[Notifier] Discord 影片回放發送成功！ (ID: ${detectionId})`);
+}
+
 module.exports = {
-  sendAlert
+  sendAlert,
+  sendVideoAlert
 };
+
