@@ -248,6 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 📐 在沒有即時串流時手動重新繪製電子圍籬的靜態方法
+    function redrawFenceStatic() {
+        if (!detectionCanvas.width || detectionCanvas.width === 0) {
+            detectionCanvas.width = 640;
+            detectionCanvas.height = 480;
+        }
+        const width = detectionCanvas.width;
+        const height = detectionCanvas.height;
+        canvasCtx.clearRect(0, 0, width, height);
+        drawFence(width, height);
+    }
+
     // 繪製 YOLO 偵測邊界框的共享邏輯
     function drawDetections(width, height) {
         // 先繪製電子圍籬背景，避免遮擋邊界框
@@ -434,13 +446,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // 關閉預錄影系統
             stopRecordingSystem();
             
-            // 還原 UI：顯示靜態佔位區，隱藏即時 Canvas
+            // 還原 UI：顯示靜態佔位區
             liveStreamPlaceholder.style.display = 'flex';
-            detectionCanvas.style.display = 'none';
             saveSnapshotBtn.disabled = true;
             
-            // 清除畫布內容與暫存框線
-            canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+            // 如果原本有設定圍籬，則不要隱藏 Canvas，而是只清空後重新繪製圍籬
+            if (fenceVertices && fenceVertices.length > 0) {
+                detectionCanvas.style.display = 'block';
+                redrawFenceStatic();
+            } else {
+                detectionCanvas.style.display = 'none';
+                canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+            }
             currentDetections = [];
             latestIpCamImage = null;
             
@@ -893,10 +910,17 @@ document.addEventListener('DOMContentLoaded', () => {
         fenceVertices = fence || [];
         if (fenceVertices.length > 0) {
             clearFenceBtn.style.display = 'block';
+            if (!isStreaming) {
+                detectionCanvas.style.display = 'block';
+                redrawFenceStatic();
+            }
         } else {
             clearFenceBtn.style.display = 'none';
+            if (!isStreaming) {
+                canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+                detectionCanvas.style.display = 'none';
+            }
         }
-        // 如果此時未在串流，可以不用繪製，但在有畫面時會自動在下次渲染套用
     });
 
     // 點擊「設置圍籬」按鈕
@@ -913,6 +937,19 @@ document.addEventListener('DOMContentLoaded', () => {
             clearFenceBtn.style.display = 'none';
             videoContainer.classList.add('editing-fence');
 
+            // 確保 canvas 能夠接收滑鼠事件
+            detectionCanvas.style.pointerEvents = 'auto';
+
+            // 如果沒有在串流，我們也需要顯示 canvas，好讓使用者點擊繪製
+            if (!isStreaming) {
+                detectionCanvas.style.display = 'block';
+                if (!detectionCanvas.width || detectionCanvas.width === 0) {
+                    detectionCanvas.width = 640;
+                    detectionCanvas.height = 480;
+                }
+                canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+            }
+
             // 插入浮動提示
             const hint = document.createElement('div');
             hint.className = 'fence-hint';
@@ -927,6 +964,9 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleFenceBtn.classList.add('btn-secondary');
             videoContainer.classList.remove('editing-fence');
 
+            // 恢復 pointer-events 為 none，讓滑鼠點擊可以穿透 canvas
+            detectionCanvas.style.pointerEvents = 'none';
+
             const hint = document.getElementById('fence-hint');
             if (hint) hint.remove();
 
@@ -936,12 +976,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('yolo_fence', JSON.stringify(fenceVertices));
                 clearFenceBtn.style.display = 'block';
                 console.log("📐 [Fence] 電子圍籬設定成功並已同步");
+                
+                // 如果未啟動串流，以閉合區域繪製圍籬
+                if (!isStreaming) {
+                    redrawFenceStatic();
+                }
             } else {
                 alert("電子圍籬必須包含至少 3 個頂點！設定已自動取消。");
                 fenceVertices = [];
                 socket.emit('clear_fence');
                 localStorage.removeItem('yolo_fence');
                 clearFenceBtn.style.display = 'none';
+                
+                // 如果未啟動串流，取消後隱藏 canvas
+                if (!isStreaming) {
+                    canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+                    detectionCanvas.style.display = 'none';
+                }
             }
         }
     });
@@ -953,6 +1004,12 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.removeItem('yolo_fence');
         clearFenceBtn.style.display = 'none';
         console.log("📐 [Fence] 電子圍籬已清除");
+        
+        // 如果未啟動串流，手動清除 Canvas 並隱藏
+        if (!isStreaming) {
+            canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+            detectionCanvas.style.display = 'none';
+        }
     });
 
     // 監聽 Canvas 上的滑鼠點選，繪製多邊形頂點
@@ -969,6 +1026,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         fenceVertices.push([rx, ry]);
         console.log(`[Fence Point] Added point: (${rx.toFixed(3)}, ${ry.toFixed(3)})`);
+
+        // 如果未啟動串流，手動重繪以即時呈現編輯點和線段
+        if (!isStreaming) {
+            redrawFenceStatic();
+        }
     });
 
     // ==========================================================================
