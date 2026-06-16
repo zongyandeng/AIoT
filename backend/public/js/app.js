@@ -648,19 +648,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // 🧠 GEMINI AI 安全分析報告生成
     // ==========================================================================
     const generateReportBtn = document.getElementById('generate-report-btn');
+    const downloadReportBtn = document.getElementById('download-report-btn');
     const geminiLoader = document.getElementById('gemini-loader');
     const geminiReportContent = document.getElementById('gemini-report-content');
+    
+    let currentReportMarkdown = '';
 
     generateReportBtn.addEventListener('click', async () => {
         geminiReportContent.style.display = 'none';
         geminiLoader.style.display = 'flex';
         generateReportBtn.disabled = true;
+        downloadReportBtn.style.display = 'none';
+        currentReportMarkdown = '';
 
         try {
             const response = await fetch('/api/gemini-report');
             const data = await response.json();
             
             if (data.success) {
+                currentReportMarkdown = data.report;
                 let htmlReport = data.report;
                 
                 // 將 Markdown 轉為 HTML 清晰展現
@@ -672,6 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     .replace(/\n\n/g, '<br><br>');
                 
                 geminiReportContent.innerHTML = htmlReport;
+                downloadReportBtn.style.display = 'flex';
             } else {
                 geminiReportContent.innerHTML = `
                     <div class="report-empty" style="color:var(--danger);">
@@ -692,5 +699,31 @@ document.addEventListener('DOMContentLoaded', () => {
             geminiReportContent.style.display = 'block';
             generateReportBtn.disabled = false;
         }
+    });
+
+    // 點擊下載報告按鈕事件
+    downloadReportBtn.addEventListener('click', () => {
+        if (!currentReportMarkdown) return;
+        
+        const blob = new Blob([currentReportMarkdown], { type: 'text/markdown;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        
+        // 取得當前時間戳記做為檔名一部分：工安稽核報告_YYYYMMDD_HHMMSS.md
+        const now = new Date();
+        const dateStr = now.getFullYear().toString() + 
+                        (now.getMonth() + 1).toString().padStart(2, '0') + 
+                        now.getDate().toString().padStart(2, '0');
+        const timeStr = now.getHours().toString().padStart(2, '0') + 
+                        now.getMinutes().toString().padStart(2, '0') + 
+                        now.getSeconds().toString().padStart(2, '0');
+        
+        link.href = url;
+        link.setAttribute('download', `AIoT_工安稽核報告_${dateStr}_${timeStr}.md`);
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     });
 });

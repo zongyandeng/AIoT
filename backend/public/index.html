@@ -170,9 +170,14 @@
                                 <h3>Gemini 智慧工安稽核報告</h3>
                                 <p>連線 PostgreSQL 資料庫，撈取最新 100 筆 YOLO 偵測紀錄，透過 **Gemini 2.5 Flash** 自動生成專業的工安防禦警告與具體改善報告。</p>
                             </div>
-                            <button class="btn btn-gemini" id="generate-report-btn">
-                                <i class="fa-solid fa-wand-magic-sparkles"></i> 一鍵生成智慧工安報告
-                            </button>
+                            <div class="gemini-controls" style="display: flex; gap: 12px;">
+                                <button class="btn btn-gemini" id="generate-report-btn" style="flex: 2;">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> 一鍵生成智慧工安報告
+                                </button>
+                                <button class="btn btn-secondary" id="download-report-btn" style="flex: 1; display: none; align-items: center; justify-content: center; gap: 8px;">
+                                    <i class="fa-solid fa-download"></i> 下載報告 (.md)
+                                </button>
+                            </div>
                             <div class="gemini-output-container">
                                 <div class="gemini-loader" id="gemini-loader" style="display:none;">
                                     <div class="sparkle-ring"></div>
@@ -202,6 +207,6 @@
     </div>
 
     <!-- App Script -->
-    <script src="/js/app.js?v=1.1.0"></script>
+    <script src="/js/app.js?v=1.2.0"></script>
 </body>
 </html>
