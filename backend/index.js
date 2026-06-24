@@ -356,9 +356,9 @@ let options = {
 console.log(`🧠 正在啟動 Python YOLO Worker (載入模型: ${yoloModelSetting})...`);
 let shell = new PythonShell('../yolo_worker.py', options);
 
-// 防抖/冷卻變數：限制同一個違規行為寫入資料庫的間隔 (5 秒)，防止過於頻繁
+// 防抖/冷卻變數：限制同一個違規行為寫入資料庫的間隔，與警報冷卻時間同步 (預設 30 秒)
 const dbCooldowns = new Map();
-const DB_COOLDOWN_TIME = 5000;
+const DB_COOLDOWN_TIME = parseInt(process.env.NOTIFICATION_COOLDOWN || '30000', 10);
 
 // 處理 YOLO 偵測到的安全違規事件 (存入資料庫與觸發通報)
 async function handleViolation(det) {
