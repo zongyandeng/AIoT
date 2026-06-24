@@ -87,15 +87,18 @@ async function sendToDiscord(url, alertName, confidence, timeStr, imageBuffer) {
           { name: '🎯 辨識置信度', value: `${confidence}%`, inline: true },
           { name: '⏰ 偵測時間', value: timeStr, inline: false }
         ],
-        image: {
-          url: 'attachment://snapshot.jpg'
-        },
         footer: {
           text: 'AIoT 即時影像監控系統 • 自動警報'
         }
       }
     ]
   };
+
+  if (imageBuffer) {
+    payload.embeds[0].image = {
+      url: 'attachment://snapshot.jpg'
+    };
+  }
 
   const formData = new FormData();
   formData.append('payload_json', JSON.stringify(payload));
