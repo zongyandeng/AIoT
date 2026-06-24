@@ -450,6 +450,8 @@ shell.on('message', async function (message) {
       for (const det of data.detections) {
         handleViolation(det);
       }
+    } else if (data.status === 'info') {
+      console.log(`ℹ️ [Python 資訊] ${data.message}`);
     } else if (data.status === 'error') {
       console.error(`❌ [Python 核心錯誤] ${data.message}`);
     }
