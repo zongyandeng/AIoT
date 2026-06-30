@@ -127,9 +127,11 @@ def main():
         try:
             epochs = []
             train_box_loss = []
-            val_box_loss = []
             train_cls_loss = []
+            train_dfl_loss = []
+            val_box_loss = []
             val_cls_loss = []
+            val_dfl_loss = []
             precision = []
             recall = []
             map50 = []
@@ -142,56 +144,52 @@ def main():
                 for row in reader:
                     epochs.append(int(row['epoch']))
                     train_box_loss.append(float(row['train/box_loss']))
-                    val_box_loss.append(float(row['val/box_loss']))
                     train_cls_loss.append(float(row['train/cls_loss']))
+                    train_dfl_loss.append(float(row['train/dfl_loss']))
+                    val_box_loss.append(float(row['val/box_loss']))
                     val_cls_loss.append(float(row['val/cls_loss']))
+                    val_dfl_loss.append(float(row['val/dfl_loss']))
                     precision.append(float(row['metrics/precision(B)']))
                     recall.append(float(row['metrics/recall(B)']))
                     map50.append(float(row['metrics/mAP50(B)']))
                     map50_95.append(float(row['metrics/mAP50-95(B)']))
 
-            fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+            fig, axes = plt.subplots(2, 5, figsize=(18, 8))
             
-            # (1) Box Loss 折線圖
-            axes[0, 0].plot(epochs, train_box_loss, label='Train Box Loss', color='blue', marker='o')
-            axes[0, 0].plot(epochs, val_box_loss, label='Val Box Loss', color='orange', marker='s')
-            axes[0, 0].set_title('Box Loss (train/val)')
-            axes[0, 0].set_xlabel('Epoch')
-            axes[0, 0].set_ylabel('Loss')
-            axes[0, 0].legend()
-            axes[0, 0].grid(True)
-
-            # (2) Class Loss 折線圖
-            axes[0, 1].plot(epochs, train_cls_loss, label='Train Cls Loss', color='blue', marker='o')
-            axes[0, 1].plot(epochs, val_cls_loss, label='Val Cls Loss', color='orange', marker='s')
-            axes[0, 1].set_title('Class Loss (train/val)')
-            axes[0, 1].set_xlabel('Epoch')
-            axes[0, 1].set_ylabel('Loss')
-            axes[0, 1].legend()
-            axes[0, 1].grid(True)
-
-            # (3) Precision / Recall 折線圖
-            axes[1, 0].plot(epochs, precision, label='Precision', color='green', marker='^')
-            axes[1, 0].plot(epochs, recall, label='Recall', color='red', marker='v')
-            axes[1, 0].set_title('Precision & Recall (Val)')
-            axes[1, 0].set_xlabel('Epoch')
-            axes[1, 0].set_ylabel('Score')
-            axes[1, 0].legend()
-            axes[1, 0].grid(True)
-
-            # (4) mAP 折線圖
-            axes[1, 1].plot(epochs, map50, label='mAP50', color='purple', marker='d')
-            axes[1, 1].plot(epochs, map50_95, label='mAP50-95', color='brown', marker='x')
-            axes[1, 1].set_title('mAP Scores (Val)')
-            axes[1, 1].set_xlabel('Epoch')
-            axes[1, 1].set_ylabel('Score')
-            axes[1, 1].legend()
-            axes[1, 1].grid(True)
-
-            plt.suptitle('YOLOv11 Training Progress Metrics', fontsize=16)
+            # Row 0: train losses & precision/recall
+            axes[0, 0].plot(epochs, train_box_loss, color='#1f77b4', linewidth=1.5)
+            axes[0, 0].set_title('train/box_loss')
+            axes[0, 1].plot(epochs, train_cls_loss, color='#1f77b4', linewidth=1.5)
+            axes[0, 1].set_title('train/cls_loss')
+            axes[0, 2].plot(epochs, train_dfl_loss, color='#1f77b4', linewidth=1.5)
+            axes[0, 2].set_title('train/dfl_loss')
+            axes[0, 3].plot(epochs, precision, color='#1f77b4', linewidth=1.5)
+            axes[0, 3].set_title('metrics/precision(B)')
+            axes[0, 4].plot(epochs, recall, color='#1f77b4', linewidth=1.5)
+            axes[0, 4].set_title('metrics/recall(B)')
+            
+            # Row 1: val losses & mAPs
+            axes[1, 0].plot(epochs, val_box_loss, color='#ff7f0e', linewidth=1.5)
+            axes[1, 0].set_title('val/box_loss')
+            axes[1, 1].plot(epochs, val_cls_loss, color='#ff7f0e', linewidth=1.5)
+            axes[1, 1].set_title('val/cls_loss')
+            axes[1, 2].plot(epochs, val_dfl_loss, color='#ff7f0e', linewidth=1.5)
+            axes[1, 2].set_title('val/dfl_loss')
+            axes[1, 3].plot(epochs, map50, color='#ff7f0e', linewidth=1.5)
+            axes[1, 3].set_title('metrics/mAP50(B)')
+            axes[1, 4].plot(epochs, map50_95, color='#ff7f0e', linewidth=1.5)
+            axes[1, 4].set_title('metrics/mAP50-95(B)')
+            
+            # Formats
+            for r in range(2):
+                for c in range(5):
+                    axes[r, c].set_xlabel('epoch')
+                    axes[r, c].grid(True, linestyle='--', alpha=0.5)
+            
+            plt.suptitle('YOLOv11 Training Progress Metrics', fontsize=14)
             plt.tight_layout()
             
-            metrics_plot_path = os.path.join(output_dir, "training_metrics_curves.png")
+            metrics_plot_path = os.path.join(output_dir, "results.png")  # 改為 YOLO 預設的檔名 results.png
             plt.savefig(metrics_plot_path, dpi=300)
             plt.close()
             print(f"訓練指標折線圖已儲存至：{metrics_plot_path}")
@@ -206,6 +204,16 @@ def main():
         raise FileNotFoundError(f"找不到模型權重檔：{model_path}")
 
     model = YOLO(model_path)
+    
+    # 關鍵：使用 dict.clear() 與 update() 原地修改類別名稱，避開 property setter 限制，更新混淆矩陣
+    print("原始類別名稱：", model.names)
+    model.names.clear()
+    model.names.update(class_names)
+    if hasattr(model, 'model') and model.model is not None:
+        if hasattr(model.model, 'names') and isinstance(model.model.names, dict):
+            model.model.names.clear()
+            model.model.names.update(class_names)
+    print("覆寫後類別名稱：", model.names)
     
     print("正在執行 YOLO 驗證以生成混淆矩陣與 PR 曲線圖...")
     # val 方法會自動使用 dataset.yaml 的設定並將結果輸出到 val_new 資料夾下
