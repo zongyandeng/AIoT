@@ -22,7 +22,7 @@ def train_yolo():
     # 1. 載入模型 (yolo26n.pt)
     model = YOLO("yolo26n.pt")
 
-    # 2. 開始訓練並應用雙卡效能優化超參數
+    # 2. 開始訓練並應用雙卡效能優化超參數與 Early Stopping
     model.train(
         data="dataset.yaml",      # 你的資料集設定檔路徑
         epochs=100,               # 訓練的 Epoch 數
@@ -32,6 +32,7 @@ def train_yolo():
         amp=True,                 # 2080 支援良好，開啟混合精度加速並節省顯存
         workers=8,                # 多核心 CPU 載入資料，設為 8
         cache=True,               # 伺服器記憶體充足，開啟 cache 圖片加速訓練
+        patience=15,              # 【新增】早停法：若連續 15 個 Epoch 驗證集指標沒有改善，則提早結束訓練防止過擬合
         save=True,                # 自動保存 best.pt 與 last.pt
         save_period=5,            # 每 5 個 epoch 備份一次模型
         project="yolo_remote_2080", # 遠端訓練專案名稱
